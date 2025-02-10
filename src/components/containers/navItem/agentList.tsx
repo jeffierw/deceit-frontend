@@ -1,6 +1,21 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
+import { Dialog } from "@/components/ui/dialog";
+import {
+  useCurrentAccount,
+  useSuiClient,
+  useSignAndExecuteTransaction,
+  useAccounts,
+} from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
+import { Pool, PoolConfig } from "navi-sdk/dist/types";
+import { pool, NAVX } from "navi-sdk/dist/address";
+import { depositCoin } from "navi-sdk/dist/libs/PTB";
+import { AppContext } from "@/context/AppContext";
+import { getNavxBalance } from "@/apis/apis";
+import { CustomDialog } from "@/components/ui/custom-dialog";
+import router from "next/router";
 
 interface AgentListProps {
   agentList: any[];
@@ -15,6 +30,7 @@ const AgentList = ({
   onEdit,
   refreshList,
 }: AgentListProps) => {
+  const { walletAddress, suiName } = useContext(AppContext);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [agentDetails, setAgentDetails] = useState<{ [key: string]: any }>({});
@@ -22,11 +38,19 @@ const AgentList = ({
   const [startingAgents, setStartingAgents] = useState<{
     [key: string]: boolean;
   }>({});
+  const client = useSuiClient();
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
 
   const totalPages = Math.ceil(agentList.length / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
   const currentData = agentList.slice(startIndex, endIndex);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [navxBalance, setNavxBalance] = useState<any>(null);
+  const [depositNavx, setDepositNavx] = useState<any>("");
+  const [errors, setErrors] = useState<any>({});
+  const [loading, setLoading] = useState<boolean>(false);
+  const [account] = useAccounts();
 
   useEffect(() => {
     setAgentDetails({});
@@ -69,7 +93,7 @@ const AgentList = ({
     setCurrentPage(1);
   };
 
-  const handleStartMatch = async (agentId: string) => {
+  const fetchStartMatch = async (agentId: string) => {
     setStartingAgents((prev) => ({ ...prev, [agentId]: true }));
     try {
       const response = await fetch(
@@ -94,6 +118,172 @@ const AgentList = ({
     } finally {
       setStartingAgents((prev) => ({ ...prev, [agentId]: false }));
     }
+  };
+
+  const handleStartMatch = async (agentId: string) => {
+    setStartingAgents((prev) => ({ ...prev, [agentId]: true }));
+    // navi deposit dialog
+    const navxBalance: any = await getNavxBalance(walletAddress ?? "");
+    setNavxBalance(navxBalance);
+    console.log(navxBalance);
+    if (navxBalance?.totalBalance > 0) {
+      setDialogOpen(true);
+    } else {
+      fetchStartMatch(agentId);
+    }
+  };
+
+  const handleStart = async () => {
+    if (depositNavx > navxBalance?.totalBalance) {
+      setErrors({ depositNavx: "Deposit amount exceeds your NAVX balance" });
+      return;
+    }
+    if (!depositNavx) {
+      router.push("/game?roomId=1691");
+      return;
+    }
+    setLoading(true);
+    const navxPool: PoolConfig = pool[NAVX.symbol as keyof Pool];
+    console.log("navxPool", navxPool);
+
+    if (!navxPool) {
+      throw new Error("Invalid pool configuration");
+    }
+    const tx = new Transaction();
+    const depositNavxNum = depositNavx * 1e9;
+    const [navxCoin] = tx.splitCoins(tx.gas, [depositNavxNum]);
+    console.log("navxCoin", navxCoin, depositNavxNum);
+    if (!navxCoin) throw new Error("Failed to split NAVX coins");
+    // deposit navx to pool
+    await depositCoin(tx, navxPool, navxCoin, depositNavxNum);
+    tx.setSender(account?.address);
+    // sign and execute transaction
+    signAndExecuteTransaction(
+      {
+        transaction: tx,
+        chain: "sui:mainnet",
+      },
+      {
+        onSuccess: async (txRes) => {
+          console.log(txRes);
+          try {
+            const finalRes = await client.waitForTransaction({
+              digest: txRes.digest,
+              options: {
+                showEffects: true,
+              },
+            });
+            toast.success("Match game successfully!");
+            setDialogOpen(false);
+            router.push("/game?roomId=1691");
+            console.log(finalRes);
+          } catch (error) {
+            console.error("Error waiting for transaction:", error);
+          }
+        },
+        onError: (err) => {
+          setLoading(false);
+          setStartingAgents(() => ({
+            ...startingAgents,
+            ...Object.keys(startingAgents).reduce(
+              (acc, id) => ({ ...acc, [id]: false }),
+              {}
+            ),
+          }));
+          toast.error(err.message);
+          console.log(err);
+        },
+      }
+    );
+  };
+
+  const renderDialogContent = () => {
+    return (
+      <div className="grid gap-3 py-2">
+        <div className="grid grid-cols-1 items-center gap-2">
+          <label htmlFor="depositNavx" className="text-left">
+            Deposit NAVX (Balance: {navxBalance?.totalBalance || 0})
+          </label>
+          <input
+            id="depositNavx"
+            className="w-full px-3 py-2 rounded-md bg-gray-100 border-none focus:outline-none"
+            value={depositNavx}
+            type="number"
+            onChange={(e) => setDepositNavx(e.target.value)}
+            placeholder="Please input the amount of NAVX you want to deposit"
+          />
+          {errors.depositNavx && (
+            <p className="text-red-500 text-sm mt-1">{errors.depositNavx}</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderDialogFooter = () => {
+    return (
+      <>
+        <Button
+          type="submit"
+          onClick={loading ? undefined : handleStart}
+          className="rounded-xl bg-[linear-gradient(226deg,#93FE0D_0%,#FFFF00_100%)]"
+          disabled={loading}
+        >
+          {loading && (
+            <svg
+              className="animate-spin h-5 w-5 mr-2"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              ></circle>
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+          )}
+          Start
+        </Button>
+        <Button
+          type="button"
+          onClick={loading ? undefined : handleStart}
+          className="rounded-xl bg-white border border-[#ccc]"
+        >
+          {loading && (
+            <svg
+              className="animate-spin h-5 w-5 mr-2"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              ></circle>
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+          )}
+          Start Without Deposit
+        </Button>
+      </>
+    );
   };
 
   return (
@@ -264,6 +454,17 @@ const AgentList = ({
           </Button>
         </div>
       </div>
+      <CustomDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        title={"Deposit Your NAVX for Starting Match"}
+        description={
+          "Discover your wallet holds NAVX tokens, deposit any amount greater than 1 NAVX to get a chance for future Deceit airdrops, but you can start the game without deposit as well."
+        }
+        footer={renderDialogFooter()}
+      >
+        {renderDialogContent()}
+      </CustomDialog>
     </div>
   );
 };

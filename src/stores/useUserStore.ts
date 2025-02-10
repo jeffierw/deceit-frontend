@@ -9,10 +9,10 @@ interface UserState {
 }
 
 const useCoreUserStore = create<UserState>()((set) => ({
-  rpcUrl: "https://fullnode.testnet.sui.io/",
+  rpcUrl: "https://fullnode.mainnet.sui.io/",
   setRpcUrl: (newUrl) => set({ rpcUrl: newUrl }),
 
-  network: "testnet",
+  network: "mainnet",
   setNetwork: (newNetwork) => set({ network: newNetwork }),
 }));
 

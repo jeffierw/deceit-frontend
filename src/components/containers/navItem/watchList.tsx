@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
 import { useSuiClient } from "@mysten/dapp-kit";
 import { getWatchList } from "@/apis/apis";
 import { useRouter } from "next/router";
 import { toast } from "react-toastify";
+import { AppContext } from "@/context/AppContext";
 
 interface GameDetail {
   roomId: string;
@@ -31,6 +32,7 @@ const mockData: GameDetail[] = [
 
 const WatchList = () => {
   const [gameList, setGameList] = useState<GameDetail[]>([]);
+  const { walletAddress, suiName } = useContext(AppContext);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -137,7 +139,11 @@ const WatchList = () => {
     `${address.slice(0, 6)}...${address.slice(-4)}`;
 
   const handleStartWatching = (roomId: string) => {
-    router.push(`/game?roomId=${roomId}`);
+    if (walletAddress) {
+      router.push(`/game?roomId=${roomId}`);
+    } else {
+      toast.error("Please connect your wallet first");
+    }
   };
 
   const copyToClipboard = async (roomId: string) => {
