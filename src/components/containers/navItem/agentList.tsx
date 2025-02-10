@@ -9,9 +9,9 @@ import {
   useAccounts,
 } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { Pool, PoolConfig } from "navi-sdk/dist/types";
+import { Pool, PoolConfig, CoinInfo } from "navi-sdk/dist/types";
 import { pool, NAVX } from "navi-sdk/dist/address";
-import { depositCoin } from "navi-sdk/dist/libs/PTB";
+import { depositCoin, returnMergedCoins } from "navi-sdk/dist/libs/PTB";
 import { AppContext } from "@/context/AppContext";
 import { getNavxBalance } from "@/apis/apis";
 import { CustomDialog } from "@/components/ui/custom-dialog";
@@ -22,6 +22,12 @@ interface AgentListProps {
   onCreateNew: () => void;
   onEdit: (agent: any) => void;
   refreshList: () => Promise<void>;
+}
+
+interface TokenObject {
+  objectId: string;
+  type: string;
+  balance: string;
 }
 
 const AgentList = ({
@@ -133,6 +139,52 @@ const AgentList = ({
     }
   };
 
+  const getAllNAVX = async (
+    cursor?: string,
+    accumulated: TokenObject[] = []
+  ): Promise<TokenObject[]> => {
+    try {
+      const response = await client.getOwnedObjects({
+        owner: walletAddress as string,
+        filter: {
+          MatchAll: [
+            {
+              StructType: "0x2::coin::Coin",
+            },
+          ],
+        },
+        options: {
+          showType: true,
+          showContent: true,
+        },
+        cursor: cursor,
+      });
+
+      const currentTokens = response.data
+        .filter((obj: any) => obj.data?.content?.type?.includes("coin::Coin"))
+        .map((obj: any) => ({
+          objectId: obj.data?.objectId,
+          type: obj.data?.content?.type,
+          balance: obj.data?.content?.fields?.balance,
+        }));
+
+      const navxTokens = currentTokens.filter((token: TokenObject) =>
+        token.type.includes(NAVX.address)
+      );
+
+      const updatedAccumulated = [...accumulated, ...navxTokens];
+
+      if (response.hasNextPage && response.nextCursor) {
+        return getAllNAVX(response.nextCursor, updatedAccumulated);
+      }
+
+      return updatedAccumulated;
+    } catch (error) {
+      console.error("Failed to fetch NAVX tokens:", error);
+      throw error;
+    }
+  };
+
   const handleStart = async () => {
     if (depositNavx > navxBalance?.totalBalance) {
       setErrors({ depositNavx: "Deposit amount exceeds your NAVX balance" });
@@ -150,12 +202,22 @@ const AgentList = ({
       throw new Error("Invalid pool configuration");
     }
     const tx = new Transaction();
-    const depositNavxNum = depositNavx * 1e9;
-    const [navxCoin] = tx.splitCoins(tx.gas, [depositNavxNum]);
-    console.log("navxCoin", navxCoin, depositNavxNum);
+    const depositNavxNum = Number(depositNavx * 1e9);
+
+    // merge all navx coins
+    let to_pay_navx = await getAllNAVX();
+    if (to_pay_navx.length >= 2) {
+      let baseObj = to_pay_navx[0].objectId;
+      let all_list = to_pay_navx.slice(1).map((coin: any) => coin.objectId);
+      tx.mergeCoins(baseObj, all_list);
+    }
+    let mergedCoinObject = tx.object(to_pay_navx[0].objectId);
+    // split navx coin
+    const [navxCoin] = tx.splitCoins(mergedCoinObject, [depositNavxNum]);
     if (!navxCoin) throw new Error("Failed to split NAVX coins");
     // deposit navx to pool
     await depositCoin(tx, navxPool, navxCoin, depositNavxNum);
+
     tx.setSender(account?.address);
     // sign and execute transaction
     signAndExecuteTransaction(
