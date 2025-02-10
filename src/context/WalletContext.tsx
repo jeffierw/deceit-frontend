@@ -29,7 +29,7 @@ const SuiWalletProvider = ({ children }: Props) => {
           storageKey="sui-wallet"
           preferredWallets={["Sui Wallet"]}
           stashedWallet={{
-            name: 'Bucket Protocol',
+            name: "Deceit",
           }}
         >
           {children}

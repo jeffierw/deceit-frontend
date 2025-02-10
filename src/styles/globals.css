@@ -4,13 +4,13 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: #fff;
     --foreground: 222.2 84% 4.9%;
   }
 
   .dark {
     --background: #070707;
-    --foreground: #ffffff;
+    --foreground: #333;
   }
 
   /* The font weight at here is following the figma design */
@@ -19,12 +19,11 @@
   }
 
   body {
-    @apply bg-black text-foreground;
+    @apply bg-white text-foreground;
   }
 }
 
 @layer utilities {
-
   .button-animate-110 {
     @apply duration-300 ease-in-out hover:scale-110 active:scale-90;
   }

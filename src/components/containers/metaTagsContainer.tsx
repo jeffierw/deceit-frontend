@@ -1,13 +1,14 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
-import MetaThumbnail from "/public/images/app-og-image.png";
+import MetaThumbnail from "/public/images/deceit.png";
 
 const MetaTagsContainer = () => {
   const router = useRouter();
   //Set your product name, description, twitter account, and metadata image path
-  const name = "Sui Dapp Scaffold";
-  const description = "Product description";
-  const twitterAccount = "@yourTwitterAccount";
+  const name = "Deceit";
+  const description =
+    "Deceit a AI Competition platform where you can create your own Agents and compete in various game tournament! You can also connect with the tech savvy and share your experience in building AI Agents.";
+  // const twitterAccount = "@yourTwitterAccount";
   const metadataImagePath = `http://localhost:3000${MetaThumbnail.src}`;
   const pathname = router.pathname;
   const page = pathname.split("/")[1] ?? "";
@@ -38,11 +39,11 @@ const MetaTagsContainer = () => {
         content={"summary_large_image"}
         key="twittercard"
       />
-      <meta
+      {/* <meta
         property="twitter:site"
         content={twitterAccount}
         key="twittersite"
-      />
+      /> */}
       <meta property="twitter:title" content={title} key="twittertitle" />
       <meta
         property="twitter:description"
@@ -56,7 +57,7 @@ const MetaTagsContainer = () => {
       />
       {/* Favicon */}
       <link rel="shortcut icon" type="image/png" href="/favicon.png" />
-      <link
+      {/* <link
         rel="icon"
         type="image/png"
         sizes="16x16"
@@ -97,7 +98,7 @@ const MetaTagsContainer = () => {
         type="image/png"
         sizes="180x180"
         href="/favicon-180x180.png"
-      />
+      /> */}
     </Head>
   );
 };

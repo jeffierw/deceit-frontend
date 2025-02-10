@@ -32,7 +32,8 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                 <MetaTagsContainer />
                 <Component {...pageProps} className={cn(inter.className)} />
                 <ToastContainer
-                  theme="dark"
+                  theme="light"
+                  bodyClassName={"text-black"}
                   draggable
                   position="bottom-right"
                   className={"mt-20"}
